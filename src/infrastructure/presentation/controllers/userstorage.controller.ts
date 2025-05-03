@@ -24,6 +24,7 @@ import UserID from 'src/domain/value-objects/UserId';
 import User from 'src/domain/aggregates/User';
 import { CreateUserCommand } from 'src/application/commands/CreateUserCommand';
 import OmahaPlayerData from '../blf/OmahaPlayerData';
+import { BLF } from '@blamnetwork/blf_lsp';
 
 @ApiTags('User Storage')
 @Controller('/storage/user')
@@ -77,82 +78,40 @@ export class UserStorageController {
         new CreateUserCommand(new UserID(xuid)),
       );
 
-    const srid = new ServiceRecord();
-    srid.playerName = user.serviceRecord.playerName ?? '';
-    srid.appearanceFlags = user.serviceRecord.appearanceFlags;
-    srid.primaryColor = user.serviceRecord.primaryColor;
-    srid.secondaryColor = user.serviceRecord.secondaryColor;
-    srid.tertiaryColor = user.serviceRecord.tertiaryColor;
-    srid.model = user.serviceRecord.model;
-    srid.foregroundEmblem = user.serviceRecord.foregroundEmblem;
-    srid.backgroundEmblem = user.serviceRecord.backgroundEmblem;
-    srid.emblemFlags = user.serviceRecord.emblemFlags;
-    srid.emblemPrimaryColor = user.serviceRecord.emblemPrimaryColor;
-    srid.emblemSecondaryColor = user.serviceRecord.emblemSecondaryColor;
-    srid.emblemBackgroundColor = user.serviceRecord.emblemBackgroundColor;
-    srid.spartanHelmet = user.serviceRecord.spartanHelmet;
-    srid.spartanLeftShounder = user.serviceRecord.spartanLeftShounder;
-    srid.spartanRightShoulder = user.serviceRecord.spartanRightShoulder;
-    srid.spartanBody = user.serviceRecord.spartanBody;
-    srid.eliteHelmet = user.serviceRecord.eliteHelmet;
-    srid.eliteLeftShoulder = user.serviceRecord.eliteLeftShoulder;
-    srid.eliteRightShoulder = user.serviceRecord.eliteRightShoulder;
-    srid.eliteBody = user.serviceRecord.eliteBody;
-    srid.serviceTag = user.serviceRecord.serviceTag;
-    srid.campaignProgress = user.serviceRecord.campaignProgress;
-    srid.highestSkill = user.serviceRecord.highestSkill;
-    srid.totalEXP = user.serviceRecord.totalEXP;
-    srid.unknownInsignia = user.serviceRecord.unknownInsignia;
-    srid.rank = user.serviceRecord.rank;
-    srid.grade = user.serviceRecord.grade;
-    srid.unknownInsignia2 = user.serviceRecord.unknownInsignia2;
+    let srid = {
+      is_elite: user.serviceRecord.model.valueOf(),
+      spartan_left_shoulder: user.serviceRecord.spartanLeftShounder.valueOf(),
+      total_exp: user.serviceRecord.totalEXP,
+      primary_color: user.serviceRecord.primaryColor.valueOf(),
+      secondary_color: user.serviceRecord.secondaryColor.valueOf(),
+      tertiary_color: user.serviceRecord.tertiaryColor.valueOf(),
+      emblem_primary_color: user.serviceRecord.emblemPrimaryColor.valueOf(),
+      emblem_secondary_color: user.serviceRecord.emblemSecondaryColor.valueOf(),
+      emblem_background_color: user.serviceRecord.emblemBackgroundColor.valueOf(),
+      spartan_helmet: user.serviceRecord.spartanHelmet.valueOf(),
+      spartan_right_shoulder: user.serviceRecord.spartanRightShoulder.valueOf(),
+      spartan_body: user.serviceRecord.spartanBody.valueOf(),
+      elite_helmet: user.serviceRecord.eliteHelmet.valueOf(),
+      elite_body: user.serviceRecord.eliteBody.valueOf(),
+      elite_left_shoulder: user.serviceRecord.eliteLeftShoulder.valueOf(),
+      elite_right_shoulder: user.serviceRecord.eliteRightShoulder.valueOf(),
+      rank: user.serviceRecord.rank.valueOf(),
+      player_name: user.serviceRecord.playerName,
+      appearance_flags: user.serviceRecord.appearanceFlags,
+      foreground_emblem: user.serviceRecord.foregroundEmblem,
+      background_emblem: user.serviceRecord.backgroundEmblem,
+      emblem_flags: user.serviceRecord.emblemFlags,
+      service_tag: user.serviceRecord.serviceTag,
+      campaign_progress: user.serviceRecord.campaignProgress,
+      highest_skill: user.serviceRecord.highestSkill,
+      unknown_insignia: user.serviceRecord.unknownInsignia,
+      unknown_insignia2: user.serviceRecord.unknownInsignia2,
+      grade: user.serviceRecord.grade,
+    };
 
-    let fupd: PlayerData | OmahaPlayerData;
+    console.log(JSON.stringify(srid));
 
-    fupd = new PlayerData();
-    fupd.hopperAccess = user.playerData.hopperAccess;
-    fupd.bungieUserRole = 0;
-    //if (user.playerData.isBnetUser) fupd.bungieUserRole += 1;
-    fupd.bungieUserRole += 1;
-    if (user.playerData.isPro) fupd.bungieUserRole += 2;
-    if (user.playerData.isBungie) fupd.bungieUserRole += 4;
-    if (user.playerData.hasRecon) fupd.bungieUserRole += 8;
-    (fupd as PlayerData).highestSkill = user.serviceRecord.highestSkill;
-    fupd.hopperDirectory = user.playerData.hopperDirectory;
-    //fupd.hopperDirectory = 'xenia_hoppers';
-
-    if (reach) {
-      fupd = new OmahaPlayerData();
-      fupd.hopperAccess = user.playerData.hopperAccess;
-      fupd.bungieUserRole = 0xffff;
-      fupd.hopperDirectory = user.playerData.hopperDirectory;
-    }
-    //fupd.hopperDirectory = 'xenia_hoppers';
-
-    const fubh = new UserBans();
-    fubh.bans = user.bans.map((ban) => ({
-      banType: ban.banType,
-      banMessageIndex: ban.banMessageIndex.value,
-      startTime: BigInt(ban.startTime.getTime() / 1000),
-      endTime: BigInt(ban.endTime.getTime() / 1000),
-    }));
-
-    const filq = new FileQueue();
-    filq.transfers = user.transfers.map((transfer) => ({
-      shareXuid: BigInt(transfer.shareId.value),
-      fileName: transfer.fileName,
-      mapId: transfer.mapId ?? 0,
-      slot: transfer.slot.value,
-      unknownC: 0,
-      unknown3C: 0,
-      unknown44: 0,
-      unknown48: 0,
-      sizeBytes: transfer.sizeBytes,
-      serverId: BigInt('1'),
-      fileType: transfer.fileType,
-    }));
-
-    return new StreamableFile(getBuffer(srid, fupd, fubh, filq));
+    return new StreamableFile(BLF.halo3.build_user_file(srid), { disposition: "filename=user.bin" });
   }
 
   @Get('/:unk1/:unk2/:unk3/:xuid/recent_players.bin')
