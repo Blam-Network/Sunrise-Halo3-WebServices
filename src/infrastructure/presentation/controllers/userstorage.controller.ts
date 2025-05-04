@@ -24,7 +24,8 @@ import UserID from 'src/domain/value-objects/UserId';
 import User from 'src/domain/aggregates/User';
 import { CreateUserCommand } from 'src/application/commands/CreateUserCommand';
 import OmahaPlayerData from '../blf/OmahaPlayerData';
-import { BLF } from '@blamnetwork/blf_lsp';
+import { BLF, s_blf_chunk_player_data, s_blf_chunk_service_record } from '@blamnetwork/blf_lsp';
+import { PrismaService } from 'src/db/prisma.service';
 
 @ApiTags('User Storage')
 @Controller('/storage/user')
@@ -33,6 +34,7 @@ export class UserStorageController {
     @Inject(ILoggerSymbol) private readonly logger: ILogger,
     private readonly queryBus: QueryBus,
     private readonly commandBus: CommandBus,
+    private readonly prisma: PrismaService
   ) {}
 
   @Get('/:unk1/:unk2/:xuid/user.bin')
@@ -69,49 +71,30 @@ export class UserStorageController {
     @Res({ passthrough: true }) res: Response,
     reach = false,
   ) {
-    let user: User = await this.queryBus.execute(
-      new GetUserQuery(new UserID(xuid)),
+    const serviceRecord = await this.prisma.service_record.findUnique({ where: { player_xuid: BigInt("0x" + xuid) }});
+    const playerData = await this.prisma.player_data.findUnique({where: {player_xuid: BigInt("0x" + xuid)}});
+
+    let fupd: s_blf_chunk_player_data;
+
+    if (playerData) {
+      let bungie_user_role = 0;
+      bungie_user_role | 1 << 1; // give everyone the seventh column
+      if (playerData.is_pro) bungie_user_role | 1 << 1;
+      if (playerData.is_bungie) bungie_user_role | 1 << 2;
+      if (playerData.has_recon || playerData.road_to_recon_completed) bungie_user_role | 1 << 3;
+      fupd = {
+        ...playerData,
+        bungie_user_role,
+        hopper_directory: playerData.hopper_directory_override || 'default_hoppers'
+      }
+    }
+
+    const blfFile = BLF.halo3.build_user_file(
+      serviceRecord, 
+      fupd
     );
 
-    if (!user)
-      user = await this.commandBus.execute(
-        new CreateUserCommand(new UserID(xuid)),
-      );
-
-    let srid = {
-      is_elite: user.serviceRecord.model.valueOf(),
-      spartan_left_shoulder: user.serviceRecord.spartanLeftShounder.valueOf(),
-      total_exp: user.serviceRecord.totalEXP,
-      primary_color: user.serviceRecord.primaryColor.valueOf(),
-      secondary_color: user.serviceRecord.secondaryColor.valueOf(),
-      tertiary_color: user.serviceRecord.tertiaryColor.valueOf(),
-      emblem_primary_color: user.serviceRecord.emblemPrimaryColor.valueOf(),
-      emblem_secondary_color: user.serviceRecord.emblemSecondaryColor.valueOf(),
-      emblem_background_color: user.serviceRecord.emblemBackgroundColor.valueOf(),
-      spartan_helmet: user.serviceRecord.spartanHelmet.valueOf(),
-      spartan_right_shoulder: user.serviceRecord.spartanRightShoulder.valueOf(),
-      spartan_body: user.serviceRecord.spartanBody.valueOf(),
-      elite_helmet: user.serviceRecord.eliteHelmet.valueOf(),
-      elite_body: user.serviceRecord.eliteBody.valueOf(),
-      elite_left_shoulder: user.serviceRecord.eliteLeftShoulder.valueOf(),
-      elite_right_shoulder: user.serviceRecord.eliteRightShoulder.valueOf(),
-      rank: user.serviceRecord.rank.valueOf(),
-      player_name: user.serviceRecord.playerName,
-      appearance_flags: user.serviceRecord.appearanceFlags,
-      foreground_emblem: user.serviceRecord.foregroundEmblem,
-      background_emblem: user.serviceRecord.backgroundEmblem,
-      emblem_flags: user.serviceRecord.emblemFlags,
-      service_tag: user.serviceRecord.serviceTag,
-      campaign_progress: user.serviceRecord.campaignProgress,
-      highest_skill: user.serviceRecord.highestSkill,
-      unknown_insignia: user.serviceRecord.unknownInsignia,
-      unknown_insignia2: user.serviceRecord.unknownInsignia2,
-      grade: user.serviceRecord.grade,
-    };
-
-    console.log(JSON.stringify(srid));
-
-    return new StreamableFile(BLF.halo3.build_user_file(srid), { disposition: "filename=user.bin" });
+    return new StreamableFile(blfFile, { disposition: "filename=user.bin" });
   }
 
   @Get('/:unk1/:unk2/:unk3/:xuid/recent_players.bin')

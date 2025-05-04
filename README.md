@@ -28,6 +28,7 @@ This project is built for use with [Sunrise-Plugin](https://github.com/craftycod
 ```env
   API_PORT=8080
   MONGO_URI=
+  DATABASE_URL=
 ```
 
 3. Build the web service with the `npm run build` command.
